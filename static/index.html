@@ -1,0 +1,61 @@
+<html>
+    <head>
+        <link rel="manifest" href="/static/manifest.json">
+        <link rel="apple-touch-icon" href="/static/imgs/icon.png">
+        <link rel="icon" href="/static/imgs/icon.png" type="image/png">
+        <meta name="apple-mobile-web-app-capable" content="yes">
+        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+        <title>アリーくんカメラ</title>
+        <style>
+            body {
+                margin: 0;
+                padding: 0;
+                background: url('/static/imgs/background.jpg') no-repeat center center fixed;
+                background-size: cover;
+                font-family: Arial, sans-serif;
+                color: #fff;
+            }
+            h1 {
+                margin: 20px 0;
+                font-size: 36px;
+                text-align: center;
+                color: #fff;
+                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
+            }
+            .container {
+                display: flex;
+                flex-direction: column;
+                align-items: center;
+                justify-content: flex-start;
+                height: 100vh;
+                padding-top: 20px;
+            }
+            img {
+                display: block;
+                width: 100%;
+                height: auto;
+                max-width: 100%;
+            }
+            audio {
+                margin-top: 20px;
+                width: 300px;
+            }
+        </style>
+    </head>
+    <body>
+        <div class="container">
+            <h1>アリーくんカメラ</h1>
+            <img src="/video_feed" alt="Video Stream">
+            <audio id="audio_feed" autoplay muted src="/audio_feed"></audio>
+            <script>
+            document.body.addEventListener('click', function() {
+                console.log('Body clicked on second load');
+                const audio = document.getElementById('audio_feed');
+                console.log('Attempting to unmute and play audio on second load');
+                audio.muted = false;
+                audio.play().then(() => console.log('Audio playing')).catch(err => console.error('Play error:', err));
+            }, { once: true });
+            </script>
+        </div>
+    </body>
+    </html>

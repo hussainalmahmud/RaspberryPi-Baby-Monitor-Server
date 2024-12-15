@@ -10,7 +10,7 @@ import uvicorn
 app = FastAPI()
 
 # Serve static files
-app.mount("/static", StaticFiles(directory="RaspberryPi-Baby-Monitor-Server"), name="static")
+app.mount("/static", StaticFiles(directory="static"), name="static")
 
 # Initialize camera
 picam2 = Picamera2()
@@ -25,24 +25,40 @@ picam2.set_controls({
 
 
 def generate_frames():
-    while True:
-        frame = picam2.capture_array()
-        frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-        frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-        _, buffer = cv2.imencode('.jpg', frame_rgb)
-        frame_bytes = buffer.tobytes()
+    """
+    Generate frames from the camera and yield them as a stream of bytes.
 
-        try:
-            yield (b'--frame\r\n'
-                   b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
-        except (BrokenPipeError, ConnectionResetError):
-            # Client disconnected
-            break
-        except Exception as e:
-            logger.error(f"Video streaming error: {e}")
-            break
+    This function is used to stream the video feed to the web browser.
+
+    1. Capture the frame from the camera.
+    2. Convert the frame to BGR format. 
+    3. Convert the frame to RGB format. 
+    4. Encode the frame to JPEG format.
+    5. Return the frame as a stream of bytes.
+    returns:
+        A stream of bytes representing the video feed.
+    """
+    # while True:
+    frame = picam2.capture_array()
+    frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
+    frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
+    _, buffer = cv2.imencode('.jpg', frame_rgb)
+    frame_bytes = buffer.tobytes()
+
+    return frame_bytes
 
 def generate_audio(process):
+    """
+    Generate audio from the microphone and yield it as a stream of bytes.
+
+    This function is used to stream the audio feed to the web browser.
+
+    1. Read the audio from the microphone.
+    2. Yield the audio as a stream of bytes.
+
+    returns:
+        A stream of bytes representing the audio feed.
+    """
     try:
         while True:
             chunk = process.stdout.read(4096)
@@ -71,90 +87,43 @@ def generate_audio(process):
 
 @app.get("/", response_class=HTMLResponse)
 async def index():
-    # Removed the button and JS related to toggling audio
-    # Using autoplay on the audio element
-    return """
-    <html>
-    <head>
-        <link rel="manifest" href="/static/manifest.json">
-        <link rel="apple-touch-icon" href="/static/imgs/icon.png">
-        <link rel="icon" href="/static/imgs/icon.png" type="image/png">
-        <meta name="apple-mobile-web-app-capable" content="yes">
-        <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <title>アリーくんカメラ</title>
-        <style>
-            body {
-                margin: 0;
-                padding: 0;
-                background: url('/static/imgs/background.jpg') no-repeat center center fixed;
-                background-size: cover;
-                font-family: Arial, sans-serif;
-                color: #fff;
-            }
-            h1 {
-                margin: 20px 0;
-                font-size: 36px;
-                text-align: center;
-                color: #fff;
-                text-shadow: 2px 2px 4px rgba(0, 0, 0, 0.7);
-            }
-            .container {
-                display: flex;
-                flex-direction: column;
-                align-items: center;
-                justify-content: flex-start;
-                height: 100vh;
-                padding-top: 20px;
-            }
-            img {
-                display: block;
-                width: 100%;
-                height: auto;
-                max-width: 100%;
-            }
-            audio {
-                margin-top: 20px;
-                width: 300px;
-            }
-        </style>
-    </head>
-    <body>
-        <div class="container">
-            <h1>アリーくんカメラ</h1>
-            <img src="/video_feed" alt="Video Stream">
-            <audio id="audio_feed" autoplay muted src="/audio_feed"></audio>
-            <script>
-            document.body.addEventListener('click', function() {
-                console.log('Body clicked on second load');
-                const audio = document.getElementById('audio_feed');
-                console.log('Attempting to unmute and play audio on second load');
-                audio.muted = false;
-                audio.play().then(() => console.log('Audio playing')).catch(err => console.error('Play error:', err));
-            }, { once: true });
-            </script>
-        </div>
-    </body>
-    </html>
     """
+    Serve the index.html file.
+
+    This function is used to serve the index.html file to the web browser.
+
+    returns:
+        The index.html file as a response.
+    """
+
+    return HTMLResponse(content=open("static/index.html", "r").read())
 
 @app.get("/video_feed")
 async def video_feed(request: Request):
+    """
+    Stream video from the camera to the web browser.
+
+    This function is used to stream the video feed to the web browser.
+
+    1. Generate the frames from the camera.
+    2. Yield the frames as a stream of bytes.
+    3. Return the streaming response with the video feed.
+
+    returns:
+        A streaming response with the video feed.
+    """
     async def video_generator():
         while True:
             if await request.is_disconnected():
                 break
-            frame = picam2.capture_array()
-            frame_bgr = cv2.cvtColor(frame, cv2.COLOR_BGRA2BGR)
-            frame_rgb = cv2.cvtColor(frame_bgr, cv2.COLOR_BGR2RGB)
-            _, buffer = cv2.imencode('.jpg', frame_rgb)
-            frame_bytes = buffer.tobytes()
+
+            frame_bytes = generate_frames()
 
             message = (b'--frame\r\n'
                        b'Content-Type: image/jpeg\r\n\r\n' + frame_bytes + b'\r\n')
             try:
                 yield message
             except (BrokenPipeError, ConnectionResetError):
-                # Client disconnected
                 break
             except Exception as e:
                 logger.error(f"Video streaming error: {e}")
@@ -165,6 +134,19 @@ async def video_feed(request: Request):
 
 @app.get("/audio_feed")
 def audio_feed():
+    """
+    Stream audio from the microphone to the web browser.
+
+    
+    This function is used to stream the audio feed to the web browser.
+
+    1. Run the ffmpeg command to capture the audio from the microphone.
+    2. Yield the audio as a stream of bytes.
+    3. Return the streaming response with the audio feed.
+
+    returns:
+        A streaming response with the audio feed.
+    """
     command = [
         "ffmpeg",
         "-loglevel", "error",  # Only print errors, no warnings/info
@@ -232,4 +214,5 @@ async def websocket_audio(websocket: WebSocket):
 
 
 if __name__ == "__main__":
+    # Run the server
     uvicorn.run(app, host="0.0.0.0", port=8000)
