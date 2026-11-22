@@ -5,9 +5,15 @@ This code was tested on Raspberry Pi 4 Model B, a camera, and a microphone bough
 This project is developed with the following technologies:
 
 - **Python**: Version 3.11.2
-- **Picamera2**: Utilized for capturing images from the camera.
-- **FastAPI**: Employed to serve images and audio to the web browser.
-- **FFmpeg**: Used for streaming audio from the microphone to the web browser.
+- **MediaMTX**: H.264 from the Raspberry Pi camera (hardware encode on Pi 4, software encode on Pi 5), plus WebRTC to the browser.
+- **FFmpeg**: Muxes USB microphone audio as Opus onto the same live stream.
+- **FastAPI**: Serves the phone web app and proxies the WebRTC handshake on port 8000.
+
+Video and crying audio are one low-latency WebRTC stream (the same approach IP cameras use in a browser). Open:
+
+**http://PI-IP:8000** (for example `http://192.168.0.200:8000`)
+
+Tap the page once on iPhone to unmute. The MediaMTX debug player is at **http://PI-IP:8889/baby**.
 
 # Used Hardware
 
@@ -27,21 +33,20 @@ This project is developed with the following technologies:
 
 ```
 .
-└── static  // static files
-    ├── imgs
-    │   ├── background.jpg  // web server background
-    │   ├── icon.png        // web server icon
-    │   ├── IR-Camera.png   // camera image
-    │   ├── Raspberry-Pi-4-Model-B.png // Raspberry Pi 4 Model B image
-    │   ├── USB-Microphone.png // microphone image
-    │   └── webserverpage.png // web server page image
-    ├── index.html          // web server index page
-    └── manifest.json       // web server manifest
-├── main.py               // contains main application logic for the web server, handling requests and serving images and audio streams to clients.
-├── README.md             // readme file
-├── requirements.txt      // python dependencies
-└── LICENSE               // license
-
+├── bin/mediamtx            // MediaMTX binary (downloaded, not committed)
+├── scripts
+│   ├── install_mediamtx.sh
+│   └── start_baby_monitor.sh
+├── static
+│   ├── imgs
+│   ├── index.html
+│   ├── reader.js
+│   └── manifest.json
+├── main.py
+├── mediamtx.yml
+├── README.md
+├── requirements.txt
+└── LICENSE
 ```
 
 ## How to run
@@ -54,29 +59,23 @@ cd RaspberryPi-Baby-Monitor-Server
 
 Create a virtual environment and install the dependencies
 ```
-python3 -m venv venv  
+python3 -m venv venv
 source venv/bin/activate
-```
-
-Install the dependencies
-```
 pip install -r requirements.txt
 ```
 
-Create screen for the server (this is to keep the server running even after closing the terminal)
+Install MediaMTX (arm64 binary into `bin/`)
 ```
-screen -S baby_monitor
-```
-
-Run the server
-```
-uvicorn main:app --reload --host 0.0.0.0 --port 8000
+scripts/install_mediamtx.sh
 ```
 
-You should get an output like this click the link and view the web server
-
+Start MediaMTX and the web app (no `--reload`)
 ```
-INFO:     Uvicorn running on http://0.0.0.0:8000 (Press CTRL+C to quit)
+scripts/start_baby_monitor.sh
 ```
 
+On this Pi the existing `@reboot` crontab still calls `/home/hussain/start_baby_monitor.sh`, which now launches the same script.
 
+You should get uvicorn listening on `http://0.0.0.0:8000`. Open that URL on a phone on the same Wi-Fi, tap once, and you should hear the room with the picture.
+
+If WebRTC connects but stays black, check that UDP port 8189 is not blocked, and that `/health` returns `"stream": true`.

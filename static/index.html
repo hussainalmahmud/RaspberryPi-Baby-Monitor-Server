@@ -3,9 +3,10 @@
         <link rel="manifest" href="/static/manifest.json">
         <link rel="apple-touch-icon" href="/static/imgs/icon.png">
         <link rel="icon" href="/static/imgs/icon.png" type="image/png">
+        <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
         <meta name="apple-mobile-web-app-capable" content="yes">
         <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-        <title>Baby Monitor</title>
+        <title>アリー君カメラ</title>
         <style>
             body {
                 margin: 0;
@@ -27,35 +28,108 @@
                 flex-direction: column;
                 align-items: center;
                 justify-content: flex-start;
-                height: 100vh;
+                min-height: 100vh;
                 padding-top: 20px;
             }
-            img {
+            .video-wrap {
+                position: relative;
+                width: 100%;
+                max-width: 100%;
+            }
+            video {
                 display: block;
                 width: 100%;
                 height: auto;
                 max-width: 100%;
+                background: #000;
             }
-            audio {
-                margin-top: 20px;
-                width: 300px;
+            .status {
+                margin: 12px 0 0;
+                font-size: 16px;
+                text-align: center;
+                text-shadow: 1px 1px 2px rgba(0, 0, 0, 0.7);
+            }
+            .tap-hint {
+                position: absolute;
+                inset: 0;
+                display: flex;
+                align-items: center;
+                justify-content: center;
+                background: rgba(0, 0, 0, 0.35);
+                font-size: 22px;
+                text-align: center;
+                padding: 20px;
+            }
+            .tap-hint.hidden {
+                display: none;
             }
         </style>
+        <script defer src="/static/reader.js"></script>
     </head>
     <body>
         <div class="container">
-            <h1>Baby Monitor</h1>
-            <img src="/video_feed" alt="Video Stream">
-            <audio id="audio_feed" autoplay muted src="/audio_feed"></audio>
-            <script>
-            document.body.addEventListener('click', function() {
-                console.log('Body clicked on second load');
-                const audio = document.getElementById('audio_feed');
-                console.log('Attempting to unmute and play audio on second load');
-                audio.muted = false;
-                audio.play().then(() => console.log('Audio playing')).catch(err => console.error('Play error:', err));
-            }, { once: true });
-            </script>
+            <h1>アリー君カメラ</h1>
+            <div class="video-wrap">
+                <video id="live" autoplay playsinline webkit-playsinline muted></video>
+                <div id="tap-hint" class="tap-hint">画面をタップして音声をオン</div>
+            </div>
+            <p id="status" class="status">接続中...</p>
         </div>
+        <script>
+            const liveVideo = document.getElementById("live");
+            const statusLabel = document.getElementById("status");
+            const tapHint = document.getElementById("tap-hint");
+            const playbackStream = new MediaStream();
+            let streamReader = null;
+
+            function setStatus(message) {
+                statusLabel.textContent = message;
+            }
+
+            function attachTrack(track) {
+                if (track.kind === "audio") {
+                    playbackStream.getAudioTracks().forEach(function (audioTrack) {
+                        playbackStream.removeTrack(audioTrack);
+                        audioTrack.stop();
+                    });
+                }
+                const alreadyAttached = playbackStream.getTracks().some(function (existingTrack) {
+                    return existingTrack.id === track.id;
+                });
+                if (!alreadyAttached) {
+                    playbackStream.addTrack(track);
+                }
+                liveVideo.srcObject = playbackStream;
+            }
+
+            function startReader() {
+                streamReader = new MediaMTXWebRTCReader({
+                    url: new URL("/live/whep", window.location.href).toString(),
+                    onError: function (errorMessage) {
+                        setStatus(errorMessage);
+                    },
+                    onTrack: function (event) {
+                        attachTrack(event.track);
+                        setStatus("ライブ");
+                        liveVideo.play().catch(function () {});
+                    }
+                });
+            }
+
+            window.addEventListener("load", startReader);
+            window.addEventListener("beforeunload", function () {
+                if (streamReader !== null) {
+                    streamReader.close();
+                }
+            });
+
+            document.body.addEventListener("click", function () {
+                liveVideo.muted = false;
+                tapHint.classList.add("hidden");
+                liveVideo.play().catch(function (error) {
+                    console.error("Play error:", error);
+                });
+            }, { once: true });
+        </script>
     </body>
-    </html>
+</html>
